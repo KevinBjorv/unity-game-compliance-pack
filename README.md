@@ -21,7 +21,7 @@ Unity projects routinely accumulate third-party software from multiple sources:
 
 At ship time you need to identify what is third-party, find the actual license terms, assemble correct notices and attributions, and keep the result stable across updates and builds. Without a system, this becomes manual, error-prone, and often happens too late.
 
-![Image](image1.jpg)
+![Image](Image1.jpg)
 
 ## What the tool generates (release-ready outputs)
 
