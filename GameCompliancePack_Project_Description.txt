@@ -1,0 +1,226 @@
+GameCompliancePack - Project Description (Unity Editor Tool)
+=======================================================
+
+1) What this project is
+This project is a Unity Editor extension that scans a Unity game project for third-party software components and generates release-ready attribution artifacts. The tool focuses on reducing the last-minute scramble around licenses, credits, and third-party notices by turning a messy project dependency graph into deterministic, shippable files.
+
+The core deliverables are:
+- THIRD_PARTY_NOTICES.txt (full attributions plus license text when available)
+- CREDITS.md (short human readable credits block)
+- compliance-manifest.json (the machine readable source of truth for diffs, audits, and repeatable builds)
+
+This is not legal advice and does not guarantee compliance. It is a workflow tool that makes it harder to forget obligations and easier to review what you ship.
+
+2) The problem it solves
+Indie and small studio projects commonly include:
+- Unity Package Manager dependencies (direct and transitive)
+- Asset Store plugins and embedded third-party code
+- DLLs and native plugins (Windows, macOS, Linux)
+- Small copied code folders, utilities, and middleware
+
+When release time approaches, teams need to:
+- identify what is third-party
+- find the relevant license terms
+- assemble the correct notices and attributions
+- keep the result stable across builds and updates
+
+Without a tool, this is manual, error-prone, and often forgotten until the last moment.
+
+3) Product goal and success criteria
+Goal:
+Generate a trustworthy, deterministic compliance pack from inside Unity with minimal friction, without inventing license data.
+
+Success looks like:
+- A user can open the tool, click Scan, resolve UNKNOWN items, and export the pack.
+- Outputs are stable across runs unless the project changes.
+- The tool detects new third-party items introduced since the last scan.
+- Optional build enforcement prevents shipping with unresolved UNKNOWN items.
+- The project remains local-first. No uploading code or project data is required by default.
+
+4) High level approach
+The tool is built around a simple pipeline:
+Scan -> Normalize -> Resolve licenses -> Apply overrides -> Generate outputs -> Compare to previous manifest
+
+Key design principles:
+- Local-first: scan the project on disk inside Unity.
+- Deterministic: stable ordering and stable component keys so diffs are meaningful.
+- No guessing: if license is not verifiable, it is UNKNOWN until the user resolves it.
+- Reviewable: outputs are plain text and JSON. They should be easy to audit.
+
+5) What the tool scans
+The scanner runs multiple sources and merges results into a unified list of Components.
+
+A) Unity Package Manager (UPM)
+- Reads Packages/manifest.json for direct dependencies.
+- Reads Packages/packages-lock.json for the resolved dependency graph (direct and transitive).
+- Captures name, version, and source (registry, git, local path).
+- Attempts to extract license hints only from verifiable metadata or included files, not from assumptions.
+
+B) File system plugins and embedded components
+- Scans common locations:
+  - Assets/Plugins
+  - Assets/ThirdParty (and similar patterns you configure)
+  - Subfolders that commonly contain plugins and libraries
+- Detects common binary formats:
+  - .dll, .so, .dylib, .bundle
+- Optionally detects code folders labeled as third party by convention, but should default to conservative rules.
+
+C) License file discovery
+For each detected component, the tool searches nearby paths for:
+- LICENSE, LICENSE.txt, LICENSE.md
+- NOTICE, NOTICE.txt
+- COPYING, COPYING.txt
+- Third Party Notices, ThirdPartyNotices
+If found, it extracts the text, stores its source path, and uses it as strong evidence.
+
+6) License resolution rules
+License resolution must be conservative. Priority order:
+
+1) Manual override
+If the user has previously set licenseId, attribution, or license text for a component key, that wins.
+
+2) Detected license file
+If a license or notice file is found adjacent to the component, use its contents as the licenseText source of truth.
+If a license identifier is detectable from the file in a verifiable way, store licenseId. Otherwise keep licenseId as UNKNOWN but keep the extracted licenseText.
+
+3) Known metadata
+If the component includes unambiguous metadata that identifies the license, map licenseId to canonical text from SPDX (packaged locally inside the tool).
+
+4) UNKNOWN
+If nothing is reliable, mark the component as UNKNOWN and require the user to resolve it.
+
+Important constraints:
+- The tool must not fabricate license IDs or texts.
+- If the tool cannot verify, it must surface UNKNOWN clearly.
+
+7) Manual overrides workflow
+UNKNOWN items are expected. The tool must make resolution fast.
+
+The Editor window should present:
+- Component name and version
+- Where it was found (path or UPM source)
+- Any hints discovered (license file names, urls, metadata)
+- A resolution UI:
+  - Choose licenseId from a list (SPDX IDs)
+  - Paste license text if needed
+  - Add attribution line and optional url
+
+Overrides are stored in a project file committed to source control so teams share the same resolutions. This makes builds reproducible across machines.
+
+8) Outputs and formatting
+A) THIRD_PARTY_NOTICES.txt
+- Contains an entry per component, stable sorted by component key.
+- Each entry includes:
+  - Component name and version
+  - Source type and optionally location
+  - Attribution text if available
+  - License identifier if known
+  - License text if known or extracted from a license file
+- If a component remains UNKNOWN:
+  - Entry must still be included
+  - It must be clearly marked UNKNOWN
+  - License text should be blank or replaced by a placeholder
+  - The goal is visibility, not false completeness
+
+B) CREDITS.md
+- A short list of attributions suitable for an in-game credits section or store page.
+- Should not dump full license text.
+- Should be stable and concise.
+- This is a convenience file, not a legal file.
+
+C) compliance-manifest.json
+This is the canonical source of truth for the tool.
+It should include:
+- toolVersion, unityVersion, timestamp, buildTarget
+- a list of components with all fields needed to regenerate outputs
+- for each component:
+  - key, name, version, sourceType, paths
+  - licenseId, licenseTextSource (SPDX, file path, override, unknown)
+  - attribution, url
+  - hash for binaries where possible (helps stable identification)
+
+9) Change tracking and diffs
+The tool should load the previous compliance-manifest.json (if present) and compute:
+- Added components
+- Removed components
+- Changed components (version change, licenseId change, hash change)
+
+This helps teams understand what changed since last scan and prevents surprises.
+
+10) Build integration
+Optional but recommended:
+- A pre-build hook reruns Scan + Generate before building.
+- If UNKNOWN exists:
+  - default behavior: warn and list unresolved components
+  - optional setting: fail the build
+
+This turns compliance from a release-time chore into a routine check.
+
+11) Determinism and stability
+Determinism is a selling point. Requirements:
+- Stable component keys so a component is the same across scans.
+- Stable ordering in all outputs.
+- No timestamps inside notices files unless explicitly enabled.
+- Avoid non-deterministic filesystem enumeration. Always sort.
+
+12) Non-goals and boundaries
+This project will not:
+- provide legal advice
+- guarantee compliance
+- detect every possible third-party item in a project with perfect accuracy
+- infer licenses from file names or AI guessing
+
+Instead, it aims to:
+- detect the most common sources reliably
+- surface unknowns early
+- make it easy to resolve unknowns once and persist the decision
+
+13) Package structure and Unity conventions
+Recommended layout:
+- Assets/GameCompliancePack/Runtime (data model, generators)
+- Assets/GameCompliancePack/Editor (scanners, UI, build hook)
+- Assets/GameCompliancePack/Compliance/Editor/Spdx (SPDX catalog)
+- Documentation files (README, quickstart)
+
+14) Testing strategy
+Minimal test strategy that matters:
+- Golden fixture projects with known expected outputs.
+- Unit tests for:
+  - parsing UPM files
+  - component key stability
+  - deterministic output ordering
+  - override merge behavior
+- Manual test cases:
+  - project with only UPM deps
+  - project with a few DLLs and a native plugin
+  - project with a custom third-party folder containing a LICENSE file
+  - project with intentionally unknown items
+
+15) Roadmap, feature progression
+Phase 1: MVP that sells
+- UPM scan
+- plugin and native lib scan
+- overrides
+- notices and credits generation
+- manifest output
+
+Phase 2: Quality and trust upgrades
+- diff view
+- build fail option
+- better license file discovery heuristics
+- more templates for outputs
+
+Phase 3: Scale and differentiation
+- multi-project support patterns
+- policy warnings (conservative, explainable)
+- improved third-party folder detection rules
+- better reporting and export options
+
+16) Positioning and messaging
+The product is not a credits UI builder.
+It is a compliance pack generator for Unity games:
+- One scan
+- One place to resolve unknowns
+- One export that is stable and repeatable
+
+The selling message is not convenience. It is launch risk reduction and time saved under pressure.
