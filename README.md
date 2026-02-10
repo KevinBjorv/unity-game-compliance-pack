@@ -1,83 +1,85 @@
 # Game Compliance Pack for Unity
 
-A local-first Unity Editor extension that scans your Unity project for third-party components and generates release-ready attribution artifacts (third-party notices, credits, and a machine-readable compliance manifest).
+Local-first Unity Editor tooling to scan a Unity project for third-party components and generate deterministic, release-ready attribution artifacts (third-party notices, credits, and a compliance manifest).
 
-This repository is documentation and examples only. It does not include the commercial source code.
+This repository contains documentation and examples only. It does not include the commercial source code.
 
-**Get the tool**
-- Unity Asset Store: (add link)
-- itch.io: (add link)
+## Get the tool
 
-## What this solves (Unity license compliance at release time)
+- itch.io (primary): https://kevindevelopment.itch.io/compliance
+- Product page: https://smartindie.dev/assets/game-compliance-pack/
+- Unity Asset Store (available soon): https://assetstore.unity.com/packages/slug/358432
+
+## Why this exists (Unity license compliance at release time)
 
 Unity projects routinely accumulate third-party software from multiple sources:
+
 - Unity Package Manager (UPM) dependencies, including transitive dependencies
 - Asset Store plugins and embedded third-party code
 - DLLs and native plugins (.dll, .so, .dylib, .bundle)
 - Copied utility folders and middleware
 
-At ship time you need to:
-- identify what is third-party
-- find the actual license terms
-- assemble correct notices and attributions
-- keep the result stable across updates and builds
+At ship time you need to identify what is third-party, find the actual license terms, assemble correct notices and attributions, and keep the result stable across updates and builds. Without a system, this becomes manual, error-prone, and often happens too late.
 
-Without a system, this becomes manual, error-prone, and often happens too late.
+## What the tool generates (release-ready outputs)
 
-## Core outputs (generated files)
-
-By default, the tool exports these files into a `Compliance/` folder at your project root:
+The tool exports a compliance pack with these core files:
 
 - `THIRD_PARTY_NOTICES.txt`  
-  Full attributions plus license text when available.
+  Full attributions plus license text when available. Always includes every detected component, even if unresolved.
 
 - `CREDITS.md`  
-  A short, human-readable credits block suitable for in-game credits or store pages (no full license dumps).
+  Short, human-readable credits suitable for an in-game credits section or store page (no full license text dumps).
 
 - `compliance-manifest.json`  
   Machine-readable source of truth for diffs, audits, and repeatable builds.
 
-- `compliance-overrides.json`  
-  Your manual fixes, attributions, license selections, and notes (committable so teams share the same decisions).
+Notes:
+- Outputs are stable-sorted by a deterministic component key so diffs stay clean.
+- If a component remains unresolved, it is clearly marked `UNKNOWN`. The tool does not guess licenses.
 
-Outputs are generated in a stable order so diffs stay clean.
+This tool is not legal advice and does not guarantee compliance. It is a workflow tool that reduces release risk by improving visibility and reviewability.
 
-## Key design principles
+## Key principles
 
-- **Local-first**: scans your project on disk inside Unity (no uploading project data by default).
-- **Deterministic**: stable component keys and stable ordering so diffs are meaningful.
-- **No guessing**: if the license is not verifiable, it stays **UNKNOWN** until you resolve it.
-- **Reviewable**: outputs are plain text and JSON so they are easy to audit.
-
-This is not legal advice and does not guarantee compliance. It is a workflow tool that makes it harder to forget obligations and easier to review what you ship.
+- Local-first: scans your project on disk inside Unity. No uploading project data by default.
+- Deterministic: stable component keys and stable ordering so diffs are meaningful.
+- No guessing: if the license cannot be verified, it stays `UNKNOWN` until you resolve it.
+- Reviewable: outputs are plain text and JSON, easy to audit and commit.
 
 ## How it works (pipeline)
 
-1. **Scan** your project sources for third-party components
-2. **Normalize** results into stable component entries
-3. **Resolve** licenses conservatively (file evidence or explicit user choice)
-4. **Apply overrides** from `compliance-overrides.json`
-5. **Generate** the outputs
-6. **Diff** against the previous `compliance-manifest.json` to detect changes
+1. Scan project sources for third-party components
+2. Normalize results into stable component entries
+3. Resolve licenses conservatively (file evidence or explicit user choice)
+4. Apply manual overrides saved in a project file (committable so teams share the same decisions)
+5. Generate `THIRD_PARTY_NOTICES.txt`, `CREDITS.md`, and `compliance-manifest.json`
+6. Compare against the previous manifest to detect added, removed, and changed components
 
 ## What it scans
 
 ### Unity Package Manager (UPM)
+
 - Reads `Packages/manifest.json` for direct dependencies
-- Reads `Packages/packages-lock.json` for resolved direct and transitive dependencies
-- Captures name, version, and source (registry, git, local path)
-- Extracts license hints only from verifiable metadata or included files (never assumptions)
+- Reads `Packages/packages-lock.json` for resolved dependencies (direct and transitive)
+- Captures package name, version, and source (registry, git, local path)
+- Extracts license hints only from verifiable metadata or included files
 
 ### File system plugins and embedded components
+
 Scans common locations (configurable), typically:
+
 - `Assets/Plugins`
 - `Assets/ThirdParty`
 
 Detects common binary formats:
+
 - `.dll`, `.so`, `.dylib`, `.bundle`
 
-### License file discovery
+### License and notice file discovery
+
 For each detected component, searches nearby paths for:
+
 - `LICENSE`, `LICENSE.txt`, `LICENSE.md`
 - `NOTICE`, `NOTICE.txt`
 - `COPYING`, `COPYING.txt`
@@ -85,110 +87,96 @@ For each detected component, searches nearby paths for:
 
 If found, the license or notice text is treated as strong evidence and can be used as the source of truth.
 
-## Quick start
+## License resolution rules (conservative by design)
 
-1. Put third-party assets in one of the scanned folders (defaults):
-   - `Assets/Plugins`
-   - `Assets/ThirdParty`
-2. Open the tool: `Tools > Compliance Pack`
-3. Click `Scan` (or `Scan All`)
-4. Resolve anything flagged as **UNKNOWN** or "missing required fields":
-   - Select a component and fill missing info in the right panel
-   - Use `Resolve Next` to jump through unresolved items
-   - If the license is known, pick an SPDX ID (MIT, Apache-2.0, BSD-3-Clause, etc.)
-   - If the license is not an SPDX license, use a `LicenseRef-*` option and paste the full license text you were given
-5. Click `Export Pack` to write the files to disk
+Resolution priority:
 
-Tip: the `Diff` tab compares the current scan to the previous `compliance-manifest.json` in your output folder so you can see what changed.
+1. Manual override  
+   If you have set licenseId, attribution, URL, or license text for a component key, that wins.
 
-## Resolving UNKNOWN (recommended workflow)
+2. Detected license or notice file  
+   If a `LICENSE` or `NOTICE` file is found adjacent to the component, its contents are used as the license text source of truth.
 
-The tool intentionally does not guess license IDs.
+3. Verifiable metadata (SPDX where possible)  
+   If unambiguous metadata identifies the license, the tool can map to an SPDX license identifier and use canonical text packaged with the tool.
 
-When a component is **UNKNOWN**, do one of these:
+4. UNKNOWN  
+   If nothing is reliable, the component stays `UNKNOWN` until you resolve it.
 
-- **Find the upstream license** (recommended)
-  - Open the component's `LICENSE` / `COPYING` / `NOTICE` file (row context menu or evidence links)
-  - If it matches an SPDX license, select the SPDX ID so the pack can use canonical text
+The tool must not fabricate license IDs or texts.
 
-- **Use a LicenseRef when it is not SPDX**
-  - Choose a `LicenseRef-*` option and paste the full license text
+## Typical workflow
 
-- **Keep it UNKNOWN until confirmed**
-  - If you cannot confirm the license yet, leave it as UNKNOWN and resolve it later
-  - Consider enabling build warnings or failures so UNKNOWN cannot slip into release builds
+1. Open the tool in Unity.
+2. Click Scan.
+3. Resolve anything marked `UNKNOWN` by adding verifiable license info and the required attribution line.
+4. Export the compliance pack.
+5. Commit the outputs (and overrides) so the team shares the same compliance state.
 
-All manual edits are stored in `compliance-overrides.json` and should be committed to source control.
+## Diffs and audits (why the manifest exists)
 
-## Manual folders (`+ Manual`)
+`compliance-manifest.json` is the machine-readable record that enables:
 
-Use `+ Manual` when:
-- a dependency is not under your scanned folders,
-- you have assets with no machine-readable license files,
-- you must add credit or attribution text exactly as required by the author.
+- Diffs between scans to show added, removed, and changed components
+- Auditable history in source control
+- Repeatable generation of notices and credits
 
-Manual entries are saved into `compliance-overrides.json` and included on export.
+## Build integration (optional)
 
-## Build-time behavior (pre-build hook)
+A pre-build hook can re-run Scan and Generate before building.
 
-Optionally, the pack can automatically scan and export on every build, then warn or fail if anything needs attention.
+Recommended settings:
 
-Common settings:
-- `Generate On Build` (default: on)
-- `Warn On Unknown` (default: on)
-- `Fail Build On Unknown` (default: off)
-- `Fail Build On Non-Commercial` (optional, if you want to block known non-commercial licenses)
+- Warn if `UNKNOWN` exists
+- Optionally fail the build if `UNKNOWN` exists
 
-### GPL and AGPL warning
-If a GPL or AGPL component is detected, the tool should warn that these licenses can require distributing corresponding source code (or a written offer) to recipients. Listing the license in `THIRD_PARTY_NOTICES.txt` is not sufficient by itself.
+This turns compliance from a release-time scramble into a routine check.
 
 ## Determinism and clean diffs
 
-Determinism is a primary feature:
-- stable component keys so a component is "the same" across scans
-- stable ordering in all outputs
-- no timestamps inside notices unless explicitly enabled
-- sorted filesystem enumeration to avoid nondeterministic ordering
+Determinism is a feature:
 
-## Configuration
+- Stable component keys so a dependency is consistently identified across machines and scans
+- Stable ordering in all outputs
+- Sorted filesystem enumeration to avoid nondeterministic ordering
+- Avoid timestamps inside notice files unless explicitly enabled
 
-Settings live at `Assets/Settings/CompliancePackSettings.asset` and are also editable in the tool window.
-
-Common options:
-- output folder and filenames
-- whether to scan UPM dependencies (`Packages/manifest.json` + `packages-lock.json`)
-- which folders to scan, and which native extensions to treat as dependencies
-- license detection confidence threshold
-- ignore rules for known non-dependencies
-
-## What this is not (non-goals)
+## What this is not
 
 - Not legal advice
-- Not a guarantee of compliance
-- Not a license guesser or AI inference tool
+- Not a compliance guarantee
+- Not a license guessing tool
 - Not a cloud service
-- Not perfect detection of every possible third-party item in a Unity project
+- Not perfect detection of every possible third-party item in every Unity project
 
-It aims to reliably catch the most common sources, surface UNKNOWN early, and make resolution fast and repeatable.
+It aims to reliably catch the common sources, surface unknowns early, and make resolution fast and repeatable.
 
-## Recommended repository contents (for docs and SEO)
+## Examples and documentation
 
-If you are viewing this on GitHub, you should also include:
-- `/docs/` (overview, workflow, outputs, FAQ)
-- `/examples/` (sample `THIRD_PARTY_NOTICES.txt`, `CREDITS.md`, `compliance-manifest.json`)
-- `/screenshots/` (Unity UI screenshots that show UNKNOWN resolution and outputs)
+Recommended repository contents:
 
-## FAQ (short)
+- `/docs/`  
+  Overview, workflow, outputs, FAQ
 
-**Does this guarantee compliance?**  
-No. It generates reviewable artifacts and forces UNKNOWN visibility so you can make informed decisions.
+- `/examples/`  
+  Example `THIRD_PARTY_NOTICES.txt`, `CREDITS.md`, `compliance-manifest.json`
 
-**Why not just do this manually once?**  
+- `/screenshots/`  
+  Unity UI screenshots showing Scan, UNKNOWN resolution, and generated outputs
+
+## FAQ
+
+### Does this guarantee compliance?
+No. It generates reviewable artifacts and forces `UNKNOWN` visibility so you can make informed decisions.
+
+### Why not just do this manually once?
 Projects change. Deterministic scans plus diffs prevent regressions and last-minute surprises.
 
-**Why keep UNKNOWN instead of best-guessing?**  
-Guessing licenses is how teams ship incorrect notices. UNKNOWN is a deliberate "stop and verify" state.
+### Why keep UNKNOWN instead of best-guessing?
+Guessing licenses is how teams ship incorrect notices. `UNKNOWN` is a deliberate stop-and-verify state.
 
----
+## Get the tool
 
-If you want to improve this README further, add links for your store pages, include 2 to 4 screenshots, and commit realistic examples under `/examples/`.
+- itch.io (primary): https://kevindevelopment.itch.io/compliance
+- Product page: https://smartindie.dev/assets/game-compliance-pack/
+- Unity Asset Store (available soon): https://assetstore.unity.com/packages/slug/358432
