@@ -157,19 +157,6 @@ Determinism is a feature:
 
 It aims to reliably catch the common sources, surface unknowns early, and make resolution fast and repeatable.
 
-## Examples and documentation
-
-Recommended repository contents:
-
-- `/docs/`  
-  Overview, workflow, outputs, FAQ
-
-- `/examples/`  
-  Example `THIRD_PARTY_NOTICES.txt`, `CREDITS.md`, `compliance-manifest.json`
-
-- `/screenshots/`  
-  Unity UI screenshots showing Scan, UNKNOWN resolution, and generated outputs
-
 ## FAQ
 
 ### Does this guarantee compliance?
