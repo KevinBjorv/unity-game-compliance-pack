@@ -1,6 +1,6 @@
 
 
-# Game Compliance Pack for Unity
+# Third‑Party Notices & Credits: License Compliance for Unity
 
 Local-first Unity Editor tooling to scan a Unity project for third-party components and generate deterministic, release-ready attribution artifacts (third-party notices, credits, and a compliance manifest).
 
